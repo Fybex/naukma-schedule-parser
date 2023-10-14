@@ -36,5 +36,6 @@ def remove_files_in_directory(directory: str):
 
 def save_schedule(schedule, filename='schedule'):
     """Save the schedule to a JSON file."""
+    os.makedirs(PARSED_SCHEDULE_DIR, exist_ok=True)
     with open(os.path.join(PARSED_SCHEDULE_DIR, f"{filename}.json"), 'w') as file:
         file.write(serialize_schedule_to_json(schedule))
