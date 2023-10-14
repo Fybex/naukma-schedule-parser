@@ -14,7 +14,10 @@ def detect_day(cell_value: str) -> DayOfWeek | None:
     threshold = 1  # Allow a maximum of one typo
 
     for day in DayOfWeek:
-        if calculate_levenshtein_distance(refined_cell_value, day.value.lower()) <= threshold:
+        if (
+            calculate_levenshtein_distance(refined_cell_value, day.value.lower())
+            <= threshold
+        ):
             return day
 
     return None
@@ -51,10 +54,10 @@ def extract_weeks(weeks: str) -> List[int]:
 
     Example: "1-3, 5, 7-9" -> [1, 2, 3, 5, 7, 8, 9]
     """
-    weeks = weeks.split(",")
+    weeks_list = [week.strip() for week in weeks.split(",")]
     result = []
 
-    for week in weeks:
+    for week in weeks_list:
         if "-" in week:
             start_week, end_week = map(int, week.split("-"))
             result.extend(range(start_week, end_week + 1))
@@ -64,10 +67,12 @@ def extract_weeks(weeks: str) -> List[int]:
     return result
 
 
-def fetch_specialities(speciality_val: str) -> List[str]:
+def fetch_specialities(speciality_val: str | None) -> List[str]:
     """Retrieve all specialties from the provided string."""
     if not speciality_val:
         return []
 
-    specialities = re.findall(r'«([^»]*)»', speciality_val) + re.findall(r'"([^"]*)"', speciality_val)
+    specialities = re.findall(r'«([^»]*)»', speciality_val) + re.findall(
+        r'"([^"]*)"', speciality_val
+    )
     return [speciality.strip() for speciality in specialities]

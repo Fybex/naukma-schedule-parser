@@ -91,10 +91,13 @@ def get_workbook_sources():
     else:
         if not os.path.exists(DOWNLOADED_SCHEDULES_DIR):
             return []
-        
-        return [os.path.join(DOWNLOADED_SCHEDULES_DIR, filename)
-                for filename in os.listdir(DOWNLOADED_SCHEDULES_DIR)
-                if os.path.splitext(filename)[-1].lower() in allowed_extensions and not filename.startswith('~$')]
+
+        return [
+            os.path.join(DOWNLOADED_SCHEDULES_DIR, filename)
+            for filename in os.listdir(DOWNLOADED_SCHEDULES_DIR)
+            if os.path.splitext(filename)[-1].lower() in allowed_extensions
+            and not filename.startswith('~$')
+        ]
 
 
 def load_workbook_from_source(source):

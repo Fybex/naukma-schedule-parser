@@ -41,5 +41,5 @@ Lesson = List[ScheduleItem]
 @dataclass
 class Schedule:
     speciality: str
-    semester: str
+    semester: Optional[str]
     subjects: Dict[str, List[Lesson]]
