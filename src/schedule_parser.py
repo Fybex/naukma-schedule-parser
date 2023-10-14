@@ -2,199 +2,172 @@ import re
 from openpyxl import Workbook
 from typing import List, Dict, Tuple
 
-from utils import identify_current_day, identify_pair_type_and_group, parse_time, parse_weeks, is_keyword_present, \
-    get_specialities
+from utils import detect_day, fetch_specialities, determine_lesson_type_and_group, convert_to_time, \
+    extract_weeks, keyword_exists, simplify_string
 from schedule_types import Schedule, ScheduleItem, Lesson
-from constants import TEACHER_TITLES
+from constants import TEACHER_TITLES, FACULTY_KEYWORD, SPECIALITY_KEYWORD, SEMESTER_KEYWORD
 
-__all__ = [
-    "parse_schedules_from_workbook"
-]
+__all__ = ["parse_workbook_to_schedules"]
 
 
-def get_headers_from_sheet(sheet) -> tuple:
-    """Extract headers from the Excel sheet."""
-    # Keywords.
-    faculty_keyword = "факультет"
-    speciality_keyword = "спеціальність"
-    semester_keyword = "семестр"
-
-    faculty_val = None
-    speciality_val = None
-    semester_val = None
+def get_sheet_headers(sheet) -> Tuple[str, List[str], str]:
+    """Retrieve faculty, specialties, and semester information from an Excel sheet."""
+    faculty, specialty, semester = None, None, None
 
     for row in sheet.iter_rows(values_only=True):
         for cell in row:
             if cell:
-                if identify_current_day(cell):
-                    return faculty_val, get_specialities(speciality_val), semester_val
+                if detect_day(cell):
+                    return faculty, fetch_specialities(specialty), semester
 
-                cell_content_lower = cell.lower()
+                cell_content = cell.lower()
 
-                if is_keyword_present(cell_content_lower, faculty_keyword):
-                    faculty_val = cell
-                elif is_keyword_present(cell_content_lower, speciality_keyword):
-                    speciality_val = cell
-                elif is_keyword_present(cell_content_lower, semester_keyword):
-                    semester_val = cell
+                if keyword_exists(cell_content, FACULTY_KEYWORD):
+                    faculty = cell
+                elif keyword_exists(cell_content, SPECIALITY_KEYWORD):
+                    specialty = cell
+                elif keyword_exists(cell_content, SEMESTER_KEYWORD):
+                    semester = cell
 
-    return faculty_val, get_specialities(speciality_val), semester_val
+    return faculty, fetch_specialities(specialty), semester
 
 
-def merge_schedule_items(existing_item: ScheduleItem, new_item: ScheduleItem) -> ScheduleItem:
-    """Merge two schedule items into one."""
-    combined_weeks = list(set(existing_item.weeks + new_item.weeks))
-    combined_weeks.sort()
+def combine_schedule_items(item1: ScheduleItem, item2: ScheduleItem) -> ScheduleItem:
+    """Combine two schedule items."""
+    merged_weeks = sorted(list(set(item1.weeks + item2.weeks)))
     return ScheduleItem(
-        type=existing_item.type,
-        group=existing_item.group,
-        time=existing_item.time,
-        weeks=combined_weeks,
-        location=existing_item.location,
-        day=existing_item.day,
-        teachers=existing_item.teachers
+        type=item1.type,
+        group=item1.group,
+        time=item1.time,
+        weeks=merged_weeks,
+        location=item1.location,
+        day=item1.day,
+        teachers=item1.teachers
     )
 
 
-def extract_subject_and_specialities(raw_subject_name: str, all_specialities: List[str]) -> Tuple[str, List[str]]:
-    """Extract the subject name and the specialities associated with it."""
-    matches = re.findall(r"\(([^)]+)\)", raw_subject_name)
-    specialities_abbreviations = None
+def extract_subject_and_associated_specialities(raw_name: str, all_specialities: List[str]) -> Tuple[str, List[str]]:
+    """Separate the subject name from its associated specialties."""
+    matches = re.findall(r"\(([^)]+)\)", raw_name)
+    specialities_codes = matches[-1] if matches else None
 
-    if matches:
-        specialities_abbreviations = matches[-1]
-
-    def cleaned_string(s: str) -> str:
-        """Return the string with only alphanumeric characters in lowercase."""
-        return ''.join(filter(str.isalnum, s)).lower()
-
-    if specialities_abbreviations:
-        abbreviations = re.split(r'[+,]', specialities_abbreviations)
-        specialities_for_subject = [
+    if specialities_codes:
+        codes = re.split(r'[+,]', specialities_codes)
+        subject_specialities = [
             sp for sp in all_specialities
-            if any(cleaned_string(abb) in cleaned_string(sp) for abb in abbreviations)
+            if any(simplify_string(code) in simplify_string(sp) for code in codes)
         ]
-        subject_name = raw_subject_name
-        for match in matches:
-            subject_name = subject_name.replace(f"({match})", "").strip()
+        subject = raw_name.replace(f"({specialities_codes})", "").strip()
     else:
-        subject_name = raw_subject_name
-        specialities_for_subject = all_specialities
+        subject = raw_name
+        subject_specialities = all_specialities
 
-    return subject_name, specialities_for_subject
+    return subject, subject_specialities
 
 
-def get_or_create_lesson(subject_name: str, all_subjects: Dict[str, Dict[str, Lesson]], speciality: str,
-                         new_schedule_item: ScheduleItem) -> None:
-    """Get or create a lesson based on the subject name and update its schedules."""
-    existing_subjects = all_subjects[speciality]
+def add_or_update_lesson(subject: str, all_lessons: Dict[str, Dict[str, Lesson]], specialty: str,
+                         schedule_item: ScheduleItem) -> None:
+    """Insert a new lesson or update an existing one."""
+    current_lessons = all_lessons.get(specialty, {})
+    lesson = current_lessons.get(subject, [])
 
-    if subject_name in existing_subjects:
-        lesson = existing_subjects[subject_name]
-        matching_item = next((item for item in lesson if
-                              item.type == new_schedule_item.type and
-                              item.group == new_schedule_item.group and
-                              item.time == new_schedule_item.time and
-                              item.location == new_schedule_item.location and
-                              item.day == new_schedule_item.day and
-                              item.teachers == new_schedule_item.teachers), None)
-        if matching_item:
-            merged_item = merge_schedule_items(matching_item, new_schedule_item)
-            lesson.remove(matching_item)
-            lesson.append(merged_item)
-        else:
-            lesson.append(new_schedule_item)
+    matching_item = next(
+        (item for item in lesson if
+         item.type == schedule_item.type and
+         item.group == schedule_item.group and
+         item.time == schedule_item.time and
+         item.location == schedule_item.location and
+         item.day == schedule_item.day and
+         item.teachers == schedule_item.teachers),
+        None
+    )
+
+    if matching_item:
+        updated_item = combine_schedule_items(matching_item, schedule_item)
+        lesson.remove(matching_item)
+        lesson.append(updated_item)
     else:
-        temp_lesson = [new_schedule_item]
-        existing_subjects[subject_name] = temp_lesson
+        lesson.append(schedule_item)
+
+    current_lessons[subject] = lesson
+    all_lessons[specialty] = current_lessons
 
 
-def sanitize_teacher_name(teacher: str) -> str:
-    """Sanitize the teacher's name."""
-    return teacher.replace('\n', '').strip()
+def clean_teacher_name(name: str) -> str:
+    """Remove unnecessary characters from the teacher's name."""
+    return name.replace('\n', '').strip()
 
 
-def extract_teacher_and_subject(details: str) -> Tuple[str, List[str]]:
-    """Extract teacher and subject from the given details, accounting for multiline strings."""
-    teachers = []
-    # Replace new lines with spaces and condense multiple spaces into one
-    details = re.sub(r'\s+', ' ', details)
-
+def extract_teacher_and_subject_info(detail: str) -> Tuple[str, List[str]]:
+    """Get teacher and subject information from the provided string."""
+    teacher_list = []
+    detail = re.sub(r'\s+', ' ', detail)
     title_pattern = '|'.join(TEACHER_TITLES)
-
-    # Pattern to match initials before or after the surname
-    teacher_pattern = re.compile(
+    teacher_regex = re.compile(
         rf"({title_pattern})?\s*([А-ЯІЇЄ][.,]\s*[А-ЯІЇЄ][.,])?\s*([А-ЯІЇЄ][а-яіїє]+)\s*([А-ЯІЇЄ][.,]\s*[А-ЯІЇЄ][.,])?")
-    matches = teacher_pattern.finditer(details)
+    matches = teacher_regex.finditer(detail)
 
     for match in matches:
         title, pre_initials, name, post_initials = match.groups()
         initials = pre_initials or post_initials
         if initials:
             full_name = (title + " " if title else "") + name + " " + initials.replace(",", ".").replace(" ", "")
-            teachers.append(full_name.strip())
-            details = details.replace(match.group().strip(), "").strip()
+            teacher_list.append(full_name.strip())
+            detail = detail.replace(match.group().strip(), "").strip()
 
-    details = details.rstrip(',').strip()
+    detail = detail.rstrip(',').strip()
 
-    return details, teachers
+    return detail, teacher_list
 
 
-def extract_lesson_details(current_day, row, all_subjects: Dict[str, Dict[str, Lesson]],
-                           all_specialities: List[str]) -> None:
-    """Extract lesson details from a row and update the given lessons' dictionary."""
-    time_slot = parse_time(row[1])
-    raw_subject_details = row[2]
-    subject_details = extract_teacher_and_subject(raw_subject_details)
-    raw_subject_name = subject_details[0].strip()
-
-    subject_name, specialities_for_subject = extract_subject_and_specialities(raw_subject_name, all_specialities)
-
-    teachers = subject_details[1]
-    pair_type, group = identify_pair_type_and_group(row[3])
-    weeks = parse_weeks(row[4])
+def extract_lesson_info_from_row(day, row, all_lessons: Dict[str, Dict[str, Lesson]],
+                                 all_specialities: List[str]) -> None:
+    """Get lesson details from a given row."""
+    time_interval = convert_to_time(row[1])
+    details, teachers = extract_teacher_and_subject_info(row[2])
+    subject, subject_specialities = extract_subject_and_associated_specialities(details, all_specialities)
+    lesson_type, group = determine_lesson_type_and_group(row[3])
+    weeks = extract_weeks(row[4])
     location = row[5]
 
-    new_schedule_item = ScheduleItem(
-        type=pair_type,
+    schedule_item = ScheduleItem(
+        type=lesson_type,
         group=group,
-        time=time_slot,
+        time=time_interval,
         weeks=weeks,
         location=location,
-        day=current_day,
+        day=day,
         teachers=teachers
     )
 
-    for speciality in specialities_for_subject:
-        get_or_create_lesson(subject_name, all_subjects, speciality, new_schedule_item)
+    for speciality in subject_specialities:
+        add_or_update_lesson(subject, all_lessons, speciality, schedule_item)
 
 
-def process_schedule(sheet, all_specialities: List[str]) -> Dict[str, Dict[str, list[Lesson]]]:
-    """Process the entire schedule to extract lessons and group by subjects."""
-    all_subjects = {speciality: {} for speciality in all_specialities}
+def extract_lessons_from_sheet(sheet, all_specialities: List[str]) -> Dict[str, Dict[str, List[Lesson]]]:
+    """Retrieve lessons from the sheet and categorize them by subject."""
+    lessons_by_subject = {speciality: {} for speciality in all_specialities}
     current_day = None
 
     for row in sheet.iter_rows(values_only=True):
-        potential_day = identify_current_day(row[0])
-        if potential_day:
-            current_day = potential_day
+        day_in_row = detect_day(row[0])
+        if day_in_row:
+            current_day = day_in_row
 
         if current_day and row[1] and row[2]:
-            extract_lesson_details(current_day, row, all_subjects, all_specialities)
+            extract_lesson_info_from_row(current_day, row, lessons_by_subject, all_specialities)
 
-    return all_subjects
+    return lessons_by_subject
 
 
-def parse_schedules_from_workbook(workbook: Workbook) -> Dict[str, List[Schedule]]:
-    """Parse a schedules from the given workbook."""
+def parse_workbook_to_schedules(workbook: Workbook) -> Dict[str, List[Schedule]]:
+    """Parse the provided workbook to extract schedules."""
     sheet = workbook.active
 
-    faculty, all_specialities, semester = get_headers_from_sheet(sheet)
-    all_subjects = process_schedule(sheet, all_specialities)
+    faculty, specialities, semester = get_sheet_headers(sheet)
+    lessons_by_subject = extract_lessons_from_sheet(sheet, specialities)
 
-    schedules_dict = {faculty: []}
+    schedules = {
+        faculty: [Schedule(speciality, semester, subjects) for speciality, subjects in lessons_by_subject.items()]}
 
-    for speciality, subjects in all_subjects.items():
-        schedules_dict[faculty].append(Schedule(speciality, semester, subjects))
-
-    return schedules_dict
+    return schedules

@@ -5,45 +5,46 @@ from openpyxl import load_workbook, Workbook
 from docx import Document
 from doc2docx import convert
 
-from constants import DOWNLOADED_SCHEDULES_DIR
+from config import DOWNLOADED_SCHEDULES_DIR
 
 
-def download_file(url: str, filename: str) -> None:
-    """Download a file from the given URL and save it to the given filename."""
-    response = requests.get(url, verify=False)  # Handle SSL warnings properly
-    with open(filename, 'wb') as file:
-        file.write(response.content)
+def download_file(url: str, destination_path: str) -> None:
+    """Download a file from a given URL and save it to the specified destination path."""
+    with requests.get(url, verify=False) as response:  # Handle SSL warnings properly
+        response.raise_for_status()  # Ensure we got a valid response
+        with open(destination_path, 'wb') as file:
+            file.write(response.content)
 
 
-def load_excel_file(filename: str) -> Workbook:
-    """Load an Excel file from the given filename."""
-    return load_workbook(filename)
+def load_excel_from_path(path: str) -> Workbook:
+    """Load an Excel workbook from a given path."""
+    return load_workbook(path)
 
 
-def convert_doc_to_docx(filename: str) -> str:
-    """Convert a Word file to the Word 2007+ format."""
-    docx_path = os.path.splitext(filename)[0] + '.docx'
-    if not os.path.exists(docx_path):
-        convert(filename, docx_path)
-    return docx_path
+def convert_doc_to_docx_if_needed(path: str) -> str:
+    """Convert a .doc file to .docx format if needed and return the .docx path."""
+    if path.endswith('.doc'):
+        docx_path = os.path.splitext(path)[0] + '.docx'
+        if not os.path.exists(docx_path):
+            convert(path, docx_path)
+        return docx_path
+    return path
 
 
-def load_doc_file(filename: str) -> Workbook:
-    """Load a Word file from the given filename."""
-    docx_path = convert_doc_to_docx(filename)
-    doc = Document(docx_path)
+def load_word_as_excel(path: str) -> Workbook:
+    """Load a Word (.doc or .docx) document and convert its content into an Excel workbook."""
+    path = convert_doc_to_docx_if_needed(path)
+    doc = Document(path)
 
     wb = Workbook()
     ws = wb.active
 
-    for i, para in enumerate(doc.paragraphs):
-        cells = [sentence.strip() for sentence in para.text.split('.') if sentence]
-
+    for i, paragraph in enumerate(doc.paragraphs):
+        cells = [sentence.strip() for sentence in paragraph.text.split('.') if sentence]
         for j, cell in enumerate(cells):
             ws.cell(row=i + 1, column=j + 1, value=cell)
 
     row_offset = len(doc.paragraphs)
-
     for table in doc.tables:
         for i, row in enumerate(table.rows):
             for j, cell in enumerate(row.cells):
@@ -52,22 +53,20 @@ def load_doc_file(filename: str) -> Workbook:
     return wb
 
 
-def load_workbook_from_file(url: str):
+def load_workbook_from_url(url: str):
+    """Download a workbook from a URL and load it. Supports Excel (.xlsx) and Word (.doc, .docx) files."""
     parsed_url = urlparse(url)
     filename = os.path.basename(parsed_url.path)
     file_extension = os.path.splitext(filename)[-1].lower()
 
-    if not os.path.exists(DOWNLOADED_SCHEDULES_DIR):
-        os.makedirs(DOWNLOADED_SCHEDULES_DIR)
-
     local_path = os.path.join(DOWNLOADED_SCHEDULES_DIR, filename)
     if not os.path.exists(local_path):
+        os.makedirs(DOWNLOADED_SCHEDULES_DIR, exist_ok=True)
         download_file(url, local_path)
 
     if file_extension == '.xlsx':
-        return load_excel_file(local_path)
-
-    if file_extension == '.doc' or file_extension == '.docx':
-        return load_doc_file(local_path)
-
-    raise ValueError(f'Unknown file extension: {file_extension}')
+        return load_excel_from_path(local_path)
+    elif file_extension in ['.doc', '.docx']:
+        return load_word_as_excel(local_path)
+    else:
+        raise ValueError(f'Unsupported file extension: {file_extension}')

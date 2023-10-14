@@ -1,7 +1,8 @@
 import json
+import os
 from dataclasses import is_dataclass, asdict
 
-from constants import PARSED_SCHEDULES_DIR
+from config import PARSED_SCHEDULES_DIR
 
 __all__ = ['print_schedule', 'clean_parsed_schedules_dir', 'save_schedule']
 
@@ -15,27 +16,33 @@ class DataclassEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def get_json(schedule):
+def serialize_schedule_to_json(schedule):
+    """Serialize the schedule into JSON format."""
     return json.dumps(schedule, cls=DataclassEncoder, indent=4, ensure_ascii=False)
 
 
 def print_schedule(schedule):
     """Print the schedule to the console."""
-    print(get_json(schedule))
+    print(serialize_schedule_to_json(schedule))
+
+
+def remove_files_in_directory(directory: str):
+    """Delete all files in the specified directory."""
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
 
 def clean_parsed_schedules_dir():
     """Remove all files from the parsed schedules directory."""
-    import os
-    import shutil
-
-    if os.path.exists(PARSED_SCHEDULES_DIR):
-        shutil.rmtree(PARSED_SCHEDULES_DIR)
-
-    os.makedirs(PARSED_SCHEDULES_DIR)
+    if not os.path.exists(PARSED_SCHEDULES_DIR):
+        os.makedirs(PARSED_SCHEDULES_DIR)
+    else:
+        remove_files_in_directory(PARSED_SCHEDULES_DIR)
 
 
 def save_schedule(schedule, filename='schedule'):
     """Save the schedule to a JSON file."""
-    with open(f'{PARSED_SCHEDULES_DIR}/{filename}.json', 'w') as file:
-        file.write(get_json(schedule))
+    with open(os.path.join(PARSED_SCHEDULES_DIR, f"{filename}.json"), 'w') as file:
+        file.write(serialize_schedule_to_json(schedule))
