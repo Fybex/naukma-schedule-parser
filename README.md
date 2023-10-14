@@ -8,6 +8,10 @@ Academy (NaUKMA) website. It can extract schedule data from Excel and Word docum
 
 Follow these steps to set up and use naukma-schedule-parser.
 
+### Requirements
+
+- Python 3.10 or higher
+
 ### Installation
 
 1. Clone the `naukma-schedule-parser` repository:
@@ -37,6 +41,16 @@ pip install -r requirements.txt
     - `DOWNLOADED_SCHEDULES_DIR`: Directory where downloaded from URLs schedules will be saved
       if `USE_SCHEDULES_FROM_URLS` is set to True. Otherwise, directory where local schedules to parse are located.
     - `PARSED_SCHEDULE_DIR`: Directory where parsed `schedule.json` will be saved.
+
+### Data Example
+
+In the `data_example` folder, you can find example files containing both input and output schedule data:
+
+- **Input Files:** These files represent sample schedule documents in the formats expected by the parser. You can use
+  them as references to structure your own schedule documents.
+- **Output Files:** After running the parser, the tool generates `schedule.json` files that represent the parsed
+  schedules. You can compare the output of the parser with these example `schedule.json` files to understand the format
+  and structure of the parsed data.
 
 ### Usage
 
