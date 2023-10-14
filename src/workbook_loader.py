@@ -1,6 +1,8 @@
 import os
 from urllib.parse import urlparse
 import requests
+from urllib3 import disable_warnings
+from urllib3.exceptions import InsecureRequestWarning
 from openpyxl import load_workbook, Workbook
 from docx import Document
 from doc2docx import convert
@@ -10,8 +12,9 @@ from config import DOWNLOADED_SCHEDULES_DIR, USE_SCHEDULES_FROM_URLS, SCHEDULES_
 
 def download_file(url: str, destination_path: str) -> None:
     """Download a file from a given URL and save it to the specified destination path."""
-    with requests.get(url, verify=False) as response:  # Handle SSL warnings properly
-        response.raise_for_status()  # Ensure we got a valid response
+    disable_warnings(InsecureRequestWarning)
+    with requests.get(url, verify=False) as response:
+        response.raise_for_status()
         with open(destination_path, 'wb') as file:
             file.write(response.content)
 
