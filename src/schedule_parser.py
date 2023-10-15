@@ -59,7 +59,7 @@ def combine_schedule_items(item1: ScheduleItem, item2: ScheduleItem) -> Schedule
 
 
 def extract_subject_and_associated_specialities(
-    raw_name: str, all_specialities: List[str]
+        raw_name: str, all_specialities: List[str]
 ) -> Tuple[str, List[str]]:
     """Separate the subject name from its associated specialties."""
     matches = re.findall(r"\(([^)]+)\)", raw_name)
@@ -81,10 +81,10 @@ def extract_subject_and_associated_specialities(
 
 
 def add_or_update_lesson(
-    subject: str,
-    all_lessons: Dict[str, Dict[str, Lesson]],
-    specialty: str,
-    schedule_item: ScheduleItem,
+        subject: str,
+        all_lessons: Dict[str, Dict[str, Lesson]],
+        specialty: str,
+        schedule_item: ScheduleItem,
 ) -> None:
     """Insert a new lesson or update an existing one."""
     current_lessons = all_lessons.get(specialty, {})
@@ -95,11 +95,11 @@ def add_or_update_lesson(
             item
             for item in lesson
             if item.type == schedule_item.type
-            and item.group == schedule_item.group
-            and item.time == schedule_item.time
-            and item.location == schedule_item.location
-            and item.day == schedule_item.day
-            and item.teachers == schedule_item.teachers
+               and item.group == schedule_item.group
+               and item.time == schedule_item.time
+               and item.location == schedule_item.location
+               and item.day == schedule_item.day
+               and item.teachers == schedule_item.teachers
         ),
         None,
     )
@@ -126,7 +126,7 @@ def extract_teacher_and_subject_info(detail: str) -> Tuple[str, List[str]]:
     detail = re.sub(r'\s+', ' ', detail)
     title_pattern = '|'.join(TEACHER_TITLES)
     teacher_regex = re.compile(
-        rf"({title_pattern})?\s*([А-ЯІЇЄ][.,]\s*[А-ЯІЇЄ][.,])?\s*([А-ЯІЇЄ][а-яіїє]+)\s*([А-ЯІЇЄ][.,]\s*[А-ЯІЇЄ][.,])?"
+        rf"({title_pattern})?\s*\.?\s*([А-ЯІЇЄ][.,]+\s*[А-ЯІЇЄ][.,]+)?\s*([А-ЯІЇЄ][а-яіїє]+)\s*([А-ЯІЇЄ][.,]+\s*[А-ЯІЇЄ][.,]+)?"
     )
     matches = teacher_regex.finditer(detail)
 
@@ -134,14 +134,16 @@ def extract_teacher_and_subject_info(detail: str) -> Tuple[str, List[str]]:
         title, pre_initials, name, post_initials = match.groups()
         initials = pre_initials or post_initials
         if initials:
+            cleaned_initials = re.sub(r"[.,]+", ".", initials).replace(" ", "")
             full_name = (
-                (title + " " if title else "")
-                + name
-                + " "
-                + initials.replace(",", ".").replace(" ", "")
+                    (title + " " if title else "")
+                    + name
+                    + " "
+                    + cleaned_initials
             )
+
             teacher_list.append(full_name.strip())
-            detail = detail.replace(match.group().strip(), "").strip()
+            detail = detail.replace(match.group().strip(), "", 1).strip()
 
     detail = detail.rstrip(',').strip()
 
@@ -149,7 +151,7 @@ def extract_teacher_and_subject_info(detail: str) -> Tuple[str, List[str]]:
 
 
 def extract_lesson_info_from_row(
-    day, row, all_lessons: Dict[str, Dict[str, Lesson]], all_specialities: List[str]
+        day, row, all_lessons: Dict[str, Dict[str, Lesson]], all_specialities: List[str]
 ) -> None:
     """Get lesson details from a given row."""
     time_interval = convert_to_time(row[1])
@@ -176,7 +178,7 @@ def extract_lesson_info_from_row(
 
 
 def extract_lessons_from_sheet(
-    sheet, all_specialities: List[str]
+        sheet, all_specialities: List[str]
 ) -> Dict[str, Dict[str, List[Lesson]]]:
     """Retrieve lessons from the sheet and categorize them by subject."""
     lessons_by_subject = {speciality: {} for speciality in all_specialities}
